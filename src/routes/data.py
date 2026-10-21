@@ -5,7 +5,8 @@ from models import ResponseSignal
 import os
 import logging
 import aiofiles
-from controllers import DataController, ProjectController
+from controllers import DataController, ProjectController, ProcessController
+from .schemas.data import ProcessRequest
 
 logger = logging.getLogger('uvicorn.error ')
 
@@ -44,3 +45,33 @@ async def upload_file(project_id: str, file: UploadFile, app_settings: Settings 
         status_code=status.HTTP_200_OK,
         content={"signal": ResponseSignal.FILE_UPLOAD_SUCCESS.value, "file_id": unique_filename}
     )
+
+@data_router.post("/process/{project_id}")
+async def process_file(project_id: str, request: ProcessRequest):
+    process_controller = ProcessController(project_id)
+    file_id = request.file_id
+    chunk_size = request.chunk_size
+    overlap_size = request.overlap_size
+    do_reset = request.do_reset
+
+    try:
+        file_content = process_controller.get_file_content(file_id)
+        chunks = process_controller.process_file_content(file_content, file_id, chunk_size, overlap_size)
+
+        # Here you can implement the logic to store the chunks in a database or any other storage.
+        # For demonstration purposes, we'll just return the number of chunks created.
+        if chunks is None or len(chunks) == 0:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"signal": ResponseSignal.PROCESSING_FAILED.value}
+            )
+        
+        return chunks  # Return the chunks as a response for demonstration purposes
+        
+    
+    except Exception as e:
+        logger.error(f"Error while processing file: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"signal": ResponseSignal.PROCESSING_FAILED.value}
+        )

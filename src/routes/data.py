@@ -9,7 +9,9 @@ from controllers import DataController, ProjectController, ProcessController
 from .schemas.data import ProcessRequest
 from models.ProjectModel import ProjectModel
 from models.ChunkModel import ChunkModel
-from models.db_schemas import DataChunk
+from models.db_schemas import DataChunk, Asset
+from models.AssetModel import AssetModel
+from models.enums.AssetTypeEnum import AssetTypeEnum
 
 logger = logging.getLogger('uvicorn.error ')
 
@@ -21,7 +23,7 @@ data_router = APIRouter(
 @data_router.post("/upload/{project_id}")
 async def upload_file(request: Request,project_id: str, file: UploadFile, app_settings: Settings = Depends(get_settings)):
 
-    prject_model = ProjectModel(request.app.db_client)
+    prject_model = await ProjectModel.create_instance(request.app.db_client)
 
     project = await prject_model.get_project_or_create_one(project_id)
 
@@ -50,9 +52,21 @@ async def upload_file(request: Request,project_id: str, file: UploadFile, app_se
             content={"signal": ResponseSignal.FILE_UPLOAD_FAILED.value}
         )
 
+
+    asset_model = await AssetModel.create_instance(request.app.db_client)
+
+    asset_resource = Asset(
+        asset_project_id=project.id,
+        asset_type=AssetTypeEnum.FILE.value,
+        asset_name=unique_filename,
+        asset_size=os.path.getsize(file_path)
+    )
+
+    asset_record = await asset_model.create_asset(asset_resource)
+
     return JSONResponse(
         status_code=status.HTTP_200_OK,
-        content={"signal": ResponseSignal.FILE_UPLOAD_SUCCESS.value, "file_id": unique_filename}
+        content={"signal": ResponseSignal.FILE_UPLOAD_SUCCESS.value, "file_id": str(asset_record.id)}
     )
 
 @data_router.post("/process/{project_id}")
@@ -63,9 +77,9 @@ async def process_file(request: Request,project_id: str, process_request: Proces
     overlap_size = process_request.overlap_size
     do_reset = process_request.do_reset
 
-    prject_model = ProjectModel(request.app.db_client)
+    prject_model = await ProjectModel.create_instance(request.app.db_client)
     
-    project = await prject_model.get_project_or_create_one(project_id=project_id)
+    project_model = await prject_model.get_project_or_create_one(project_id=project_id)
 
     try:
         file_content = process_controller.get_file_content(file_id)
@@ -84,7 +98,7 @@ async def process_file(request: Request,project_id: str, process_request: Proces
                 chunk_metadata=chunk.metadata,
                 chunk_text=chunk.page_content,
                 chunk_order=i+1,
-                chunk_project_id=project.id
+                chunk_project_id=project_model.id
             )
             for i, chunk in enumerate(chunks)
         ]
@@ -92,7 +106,7 @@ async def process_file(request: Request,project_id: str, process_request: Proces
 
         if do_reset == 1:
             _ = await chunk_model.delete_chunks_by_project_id(
-                project.id
+                project_model.id
             )
 
         no_records = await chunk_model.insert_many_chunks(file_chunk_records)

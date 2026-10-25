@@ -38,7 +38,6 @@ async def upload_file(request: Request,project_id: str, file: UploadFile, app_se
             content={"signal": validation_message}
         )
 
-    project_dir_path = ProjectController().get_project_path(project_id)
     file_path, unique_filename = data_controller.generate_uniuqe_filepath(file.filename, project_id)
 
     try:

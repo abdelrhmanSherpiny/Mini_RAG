@@ -52,7 +52,7 @@ class NLPController(BaseController):
         )
 
         # step4: insert into vector db
-        _ = await self.vectordb_client.insert_many(
+        inserted = await self.vectordb_client.insert_many(
             collection_name=collection_name,
             texts=texts,
             metadata=metadata,
@@ -60,7 +60,7 @@ class NLPController(BaseController):
             record_ids=chunks_ids,
         )
 
-        return True
+        return bool(inserted)
 
     async def search_vector_db_collection(self, project: Project, text: str, limit: int = 10):
 
